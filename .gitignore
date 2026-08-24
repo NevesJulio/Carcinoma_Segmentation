@@ -1,0 +1,43 @@
+# Dados histológicos e anotações
+data/
+datasets/
+*.svs
+*.ndpi
+*.mrxs
+*.tif
+*.tiff
+*.xml
+
+# Modelos, checkpoints e resultados
+runs/
+outputs/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# Ambientes e artefatos Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Segredos e configurações locais
+.env
+.env.*
+*.pem
+*.key
+
+# Sistema operacional e editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
