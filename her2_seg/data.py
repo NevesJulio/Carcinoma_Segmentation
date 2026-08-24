@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,7 +54,22 @@ def discover_pairs(root: str | Path) -> tuple[list[SlidePair], list[Path]]:
 
 
 def parse_aperio_xml(path: str | Path) -> list[Region]:
-    root = ET.parse(path).getroot()
+    path = Path(path)
+    try:
+        root = ET.parse(path).getroot()
+    except ET.ParseError as exc:
+        # Alguns XMLs da coorte Yale contêm uma segunda <Annotation> depois do
+        # fechamento de <Annotations>. Ambas as partes são XML válido, mas o
+        # documento possui mais de uma raiz. Uma raiz sintética preserva todas
+        # as regiões sem modificar o conjunto de dados original.
+        if "junk after document element" not in str(exc):
+            raise
+        text = path.read_text(encoding="utf-8-sig")
+        # Nesses arquivos, a segunda Annotation ainda termina com
+        # </Annotations>, embora não tenha a abertura correspondente.
+        text = re.sub(r"<\?xml[^>]*\?>", "", text)
+        text = re.sub(r"</?Annotations\b[^>]*>", "", text)
+        root = ET.fromstring(f"<AperioDocument>{text}</AperioDocument>")
     regions: list[Region] = []
     for node in root.findall(".//Region"):
         points = [(float(v.attrib["X"]), float(v.attrib["Y"])) for v in node.findall(".//Vertex")]
@@ -137,4 +153,3 @@ class WSIPatchDataset(Dataset):
         image = np.ascontiguousarray(image.transpose(2, 0, 1))
         mask = np.ascontiguousarray(mask[None].astype(np.float32))
         return torch.from_numpy(image), torch.from_numpy(mask)
-
