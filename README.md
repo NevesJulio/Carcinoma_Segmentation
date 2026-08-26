@@ -84,3 +84,13 @@ python evaluate_wsi.py --checkpoint runs/her2_unet_fp32/best.pt \
 
 Uma lâmina também pode ser escolhida pelo índice no split: `--split-json
 runs/her2_unet_fp32/split.json --split validation --index 0`.
+
+Para gerar uma pasta por lâmina para todo o conjunto:
+
+```bash
+python evaluate_wsi_split.py --checkpoint runs/her2_unet_fp32/best.pt \
+  --split-json runs/her2_unet_fp32/split.json --split validation \
+  --output-root evaluation/validation
+```
+
+O processamento é retomável: casos que já possuem `overview.png` são ignorados.
