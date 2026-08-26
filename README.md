@@ -30,3 +30,8 @@ feita antes da geração dos patches e, portanto, sempre por lâmina.
 Os checkpoints e a configuração ficam em `runs/her2_unet/`. Ajuste
 `--level` conforme a magnificação desejada (as coordenadas do XML são sempre
 convertidas corretamente a partir do nível 0).
+
+Cada execução também salva `metrics.csv` (loss e Dice por época) e `split.json`
+(lâminas de treino e validação). Para GPUs pequenas, use `--batch-size 1
+--freeze-bn`; se ocorrer instabilidade numérica, use `--no-amp` junto de patches
+menores, por exemplo `--patch-size 256 --batch-size 2`.

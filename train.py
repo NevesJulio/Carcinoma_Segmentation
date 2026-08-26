@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import random
 from pathlib import Path
@@ -32,6 +33,9 @@ def arguments():
     p.add_argument("--batch-size", type=int, default=4)
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--lr", type=float, default=1e-4)
+    p.add_argument("--no-amp", action="store_true", help="Desativa mixed precision (mais estável, usa mais VRAM)")
+    p.add_argument("--grad-clip", type=float, default=1.0)
+    p.add_argument("--freeze-bn", action="store_true", help="Congela estatísticas BatchNorm; recomendado com batch 1")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--inspect", action="store_true", help="Somente mostra pareamento e divisão")
     return p.parse_args()
@@ -53,6 +57,12 @@ def main():
 
     output = Path(args.output); output.mkdir(parents=True, exist_ok=True)
     (output / "config.json").write_text(json.dumps(vars(args), indent=2, ensure_ascii=False))
+    split = {
+        "seed": args.seed,
+        "train": [{"key": p.key, "slide": str(p.slide), "xml": str(p.xml)} for p in train_pairs],
+        "validation": [{"key": p.key, "slide": str(p.slide), "xml": str(p.xml)} for p in val_pairs],
+    }
+    (output / "split.json").write_text(json.dumps(split, indent=2, ensure_ascii=False))
     common = dict(patch_size=args.patch_size, level=args.level, samples_per_slide=args.samples_per_slide,
                   positive_fraction=args.positive_fraction, channels=args.channels, seed=args.seed)
     train_ds = WSIPatchDataset(train_pairs, augment=True, **common)
@@ -62,24 +72,51 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = create_model(args.architecture, args.encoder, args.channels).to(device)
     loss_fn, optimizer = DiceFocalLoss(), torch.optim.AdamW(model.parameters(), lr=args.lr)
-    scaler = GradScaler("cuda", enabled=device.type == "cuda")
+    amp_enabled = device.type == "cuda" and not args.no_amp
+    scaler = GradScaler("cuda", enabled=amp_enabled)
+    metrics_path = output / "metrics.csv"
+    with metrics_path.open("w", newline="") as file:
+        csv.writer(file).writerow(["epoch", "train_loss", "val_dice"])
     best = -1.0
     for epoch in range(1, args.epochs + 1):
-        model.train(); running = 0.0
+        model.train()
+        if args.freeze_bn or args.batch_size == 1:
+            for module in model.modules():
+                if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
+                    module.eval()
+        running = 0.0
         for image, mask in tqdm(train_dl, desc=f"epoch {epoch}/{args.epochs}"):
             image, mask = image.to(device, non_blocking=True), mask.to(device, non_blocking=True)
             optimizer.zero_grad(set_to_none=True)
-            with autocast(device.type, enabled=device.type == "cuda"):
-                loss = loss_fn(model(image), mask)
-            scaler.scale(loss).backward(); scaler.step(optimizer); scaler.update()
+            with autocast(device.type, enabled=amp_enabled):
+                logits = model(image)
+                loss = loss_fn(logits, mask)
+            if not torch.isfinite(loss):
+                raise FloatingPointError(
+                    f"Loss não finita na época {epoch}. O treino foi interrompido antes de salvar checkpoint. "
+                    "Tente --no-amp, patch menor e --freeze-bn."
+                )
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+            scaler.step(optimizer); scaler.update()
             running += loss.item()
         model.eval(); scores = []
-        for image, mask in val_dl:
-            image, mask = image.to(device), mask.to(device)
-            scores.append(dice_score(model(image), mask))
+        with torch.inference_mode():
+            for image, mask in val_dl:
+                image, mask = image.to(device, non_blocking=True), mask.to(device, non_blocking=True)
+                with autocast(device.type, enabled=amp_enabled):
+                    logits = model(image)
+                if not torch.isfinite(logits).all():
+                    raise FloatingPointError(f"Predição não finita na validação da época {epoch}")
+                scores.append(dice_score(logits.float(), mask))
         score = sum(scores) / len(scores)
-        print(f"epoch={epoch} loss={running/len(train_dl):.5f} val_dice={score:.5f}")
-        state = {"epoch": epoch, "model": model.state_dict(), "optimizer": optimizer.state_dict(), "val_dice": score, "args": vars(args)}
+        train_loss = running / len(train_dl)
+        print(f"epoch={epoch} loss={train_loss:.5f} val_dice={score:.5f}")
+        with metrics_path.open("a", newline="") as file:
+            csv.writer(file).writerow([epoch, train_loss, score])
+        state = {"epoch": epoch, "model": model.state_dict(), "optimizer": optimizer.state_dict(),
+                 "train_loss": train_loss, "val_dice": score, "args": vars(args)}
         torch.save(state, output / "last.pt")
         if score > best:
             best = score; torch.save(state, output / "best.pt")
@@ -87,4 +124,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
