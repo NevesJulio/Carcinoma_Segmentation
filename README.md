@@ -56,3 +56,19 @@ python predict_patch.py --checkpoint runs/her2_unet_fp32_bs32/best.pt \
 
 Para escolher automaticamente um patch dentro da maior região anotada, forneça
 o XML no lugar das coordenadas: `--slide lamina.svs --xml anotacao.xml`.
+
+## Avaliação de um split
+
+Os treinos novos separam 70%/15%/15% por lâmina e registram treino, validação e
+teste em `split.json`. A avaliação desenha o XML em azul, a predição em vermelho
+e a interseção em magenta, além de salvar Dice e IoU:
+
+```bash
+python evaluate_split.py --checkpoint runs/her2_unet_fp32_bs32/best.pt \
+  --split-json runs/her2_unet_fp32_bs32/split.json --split test \
+  --output evaluation/test
+```
+
+Checkpoints anteriores, cujo `split.json` só contém treino e validação, podem
+ser visualizados com `--split validation`; esse resultado não deve ser reportado
+como teste independente.

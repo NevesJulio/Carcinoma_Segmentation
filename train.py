@@ -28,7 +28,8 @@ def arguments():
     p.add_argument("--level", type=int, default=0)
     p.add_argument("--samples-per-slide", type=int, default=32)
     p.add_argument("--positive-fraction", type=float, default=.7)
-    p.add_argument("--val-fraction", type=float, default=.2)
+    p.add_argument("--val-fraction", type=float, default=.15)
+    p.add_argument("--test-fraction", type=float, default=.15, help="Reservado; não participa do treino/validação")
     p.add_argument("--epochs", type=int, default=30)
     p.add_argument("--batch-size", type=int, default=4)
     p.add_argument("--workers", type=int, default=4)
@@ -48,9 +49,15 @@ def main():
         raise SystemExit("Nenhum par lâmina/XML encontrado")
     rng = random.Random(args.seed)
     rng.shuffle(pairs)
+    if args.val_fraction + args.test_fraction >= 1:
+        raise SystemExit("A soma de --val-fraction e --test-fraction deve ser menor que 1")
     n_val = max(1, round(len(pairs) * args.val_fraction))
-    val_pairs, train_pairs = pairs[:n_val], pairs[n_val:]
-    print(f"Pares: {len(pairs)} | treino: {len(train_pairs)} | validação: {len(val_pairs)} | XML sem lâmina: {len(missing)}")
+    n_test = max(1, round(len(pairs) * args.test_fraction)) if args.test_fraction > 0 else 0
+    test_pairs = pairs[:n_test]
+    val_pairs = pairs[n_test:n_test + n_val]
+    train_pairs = pairs[n_test + n_val:]
+    print(f"Pares: {len(pairs)} | treino: {len(train_pairs)} | validação: {len(val_pairs)} | "
+          f"teste: {len(test_pairs)} | XML sem lâmina: {len(missing)}")
     if args.inspect:
         for pair in pairs[:10]: print(f"{pair.key}: {pair.slide}")
         return
@@ -61,6 +68,7 @@ def main():
         "seed": args.seed,
         "train": [{"key": p.key, "slide": str(p.slide), "xml": str(p.xml)} for p in train_pairs],
         "validation": [{"key": p.key, "slide": str(p.slide), "xml": str(p.xml)} for p in val_pairs],
+        "test": [{"key": p.key, "slide": str(p.slide), "xml": str(p.xml)} for p in test_pairs],
     }
     (output / "split.json").write_text(json.dumps(split, indent=2, ensure_ascii=False))
     common = dict(patch_size=args.patch_size, level=args.level, samples_per_slide=args.samples_per_slide,
