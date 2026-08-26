@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 
-def create_model(architecture="unet", encoder="resnet50", channels=3):
+def create_model(architecture="unet", encoder="resnet50", channels=3, encoder_weights="imagenet"):
     try:
         import segmentation_models_pytorch as smp
     except ImportError as exc:
@@ -12,7 +12,7 @@ def create_model(architecture="unet", encoder="resnet50", channels=3):
     models = {"unet": smp.Unet, "fpn": smp.FPN, "deeplabv3plus": smp.DeepLabV3Plus}
     if architecture not in models:
         raise ValueError(f"Arquitetura inválida: {architecture}; opções: {', '.join(models)}")
-    return models[architecture](encoder_name=encoder, encoder_weights="imagenet", in_channels=channels, classes=1)
+    return models[architecture](encoder_name=encoder, encoder_weights=encoder_weights, in_channels=channels, classes=1)
 
 
 class DiceFocalLoss(nn.Module):
@@ -34,4 +34,3 @@ class DiceFocalLoss(nn.Module):
 def dice_score(logits, target, threshold=.5):
     pred = (logits.sigmoid() >= threshold).float()
     return ((2 * (pred * target).sum() + 1) / (pred.sum() + target.sum() + 1)).item()
-

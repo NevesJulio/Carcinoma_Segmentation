@@ -35,3 +35,24 @@ Cada execução também salva `metrics.csv` (loss e Dice por época) e `split.js
 (lâminas de treino e validação). Para GPUs pequenas, use `--batch-size 1
 --freeze-bn`; se ocorrer instabilidade numérica, use `--no-amp` junto de patches
 menores, por exemplo `--patch-size 256 --batch-size 2`.
+
+## Inferência em patches
+
+O comando usa automaticamente arquitetura, encoder e canais registrados no
+checkpoint e salva patch, probabilidade, máscara, overlay e a matriz `.npy`:
+
+```bash
+python predict_patch.py --checkpoint runs/her2_unet_fp32_bs32/best.pt \
+  --input patch.png --output inference/patch_01
+```
+
+Também é possível ler o patch diretamente de uma lâmina. `x` e `y` são
+coordenadas no nível 0:
+
+```bash
+python predict_patch.py --checkpoint runs/her2_unet_fp32_bs32/best.pt \
+  --slide lamina.svs --x 20000 --y 15000 --output inference/lamina_01
+```
+
+Para escolher automaticamente um patch dentro da maior região anotada, forneça
+o XML no lugar das coordenadas: `--slide lamina.svs --xml anotacao.xml`.
