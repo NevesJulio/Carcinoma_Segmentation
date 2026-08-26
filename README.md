@@ -72,3 +72,15 @@ python evaluate_split.py --checkpoint runs/her2_unet_fp32_bs32/best.pt \
 Checkpoints anteriores, cujo `split.json` só contém treino e validação, podem
 ser visualizados com `--split validation`; esse resultado não deve ser reportado
 como teste independente.
+
+Para obter uma única imagem panorâmica da lâmina, com XML azul e modelo
+vermelho, use `evaluate_wsi.py`. A rede percorre a caixa das anotações com margem
+na resolução usada no treino e projeta o resultado no thumbnail completo:
+
+```bash
+python evaluate_wsi.py --checkpoint runs/her2_unet_fp32/best.pt \
+  --slide caso.svs --xml caso.xml --output evaluation/caso_overview.png
+```
+
+Uma lâmina também pode ser escolhida pelo índice no split: `--split-json
+runs/her2_unet_fp32/split.json --split validation --index 0`.
